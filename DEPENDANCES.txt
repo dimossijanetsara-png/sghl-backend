@@ -1,0 +1,114 @@
+====================================================================
+  SGHL BACKEND — Dépendances et Packages
+  Langage : Python  |  Framework : Django 6
+====================================================================
+
+--- FRAMEWORK PRINCIPAL ---
+Django==6.0.6
+    Framework web Python principal
+
+django-ninja==1.6.2
+    API REST moderne basée sur Pydantic (remplace DRF pour les endpoints)
+
+--- AUTHENTIFICATION & SECURITE ---
+djangorestframework-simplejwt==5.5.1
+    Gestion des tokens JWT (access + refresh)
+
+pyotp==2.9.0
+    Génération et vérification des codes TOTP (double authentification MFA)
+
+qrcode==8.2
+    Génération de QR codes pour la configuration MFA (Google Authenticator)
+
+cryptography==48.0.1
+    Chiffrement AES des données sensibles
+
+--- BASE DE DONNÉES ---
+psycopg2-binary==2.9.12
+    Adaptateur PostgreSQL pour Python
+
+--- CACHE & FILE D'ATTENTE ---
+redis==8.0.0
+    Client Redis (cache + broker Celery)
+
+django-redis==7.0.0
+    Backend de cache Redis pour Django
+
+celery==5.6.3
+    Gestion des tâches asynchrones en arrière-plan
+
+--- WEBSOCKETS ---
+channels==4.3.2
+    Support WebSocket et ASGI pour Django (messagerie temps réel)
+
+channels-redis==4.3.0
+    Backend Redis pour Django Channels
+
+--- FICHIERS & MÉDIAS ---
+Pillow==12.2.0
+    Traitement et manipulation d'images
+
+reportlab==4.5.1
+    Génération de fichiers PDF (factures, rapports médicaux)
+
+python-magic-bin==0.4.14
+    Détection du type MIME des fichiers uploadés
+
+pyHanko==0.27.0
+    Signature électronique de documents PDF
+
+--- EMAILS & NOTIFICATIONS ---
+firebase-admin==6.5.0
+    Notifications push mobiles via Firebase Cloud Messaging
+
+--- CORS & HTTP ---
+django-cors-headers==4.9.0
+    Gestion des en-têtes CORS (accès depuis le frontend Vue et le mobile Flutter)
+
+django-filter==25.2
+    Filtrage avancé des querysets dans les APIs
+
+--- CONFIGURATION ---
+python-dotenv==1.2.2
+    Chargement des variables d'environnement depuis le fichier .env
+
+pydantic[email]==2.13.4
+    Validation des données et sérialisation (utilisé par Django Ninja)
+
+--- MONITORING & LOGS ---
+prometheus-client==0.21.0
+    Exposition des métriques applicatives (requests, latences)
+
+python-json-logger==2.0.7
+    Logs structurés au format JSON
+
+sentry-sdk==2.17.0
+    Surveillance des erreurs en production (Sentry)
+
+--- TESTS ---
+pytest==9.0.3
+    Framework de tests Python
+
+pytest-django==4.12.0
+    Intégration de pytest avec Django
+
+pytest-cov==6.0.0
+    Mesure de la couverture de code lors des tests
+
+pytest-mock==3.14.0
+    Utilitaires de mock pour les tests
+
+factory-boy==3.3.3
+    Création de données de test (factories)
+
+faker==40.22.0
+    Génération de données fictives réalistes pour les tests
+
+====================================================================
+  COMMANDE D'INSTALLATION
+====================================================================
+pip install -r requirements.txt
+
+  DÉMARRAGE DU SERVEUR
+====================================================================
+python manage.py runserver

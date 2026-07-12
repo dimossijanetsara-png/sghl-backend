@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import timedelta
 import os
+import dj_database_url
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -9,7 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-fallback-key')
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,10.0.2.2').split(',')
 
 DJANGO_APPS = [
     'django.contrib.admin',
@@ -46,6 +47,7 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -53,8 +55,10 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'apps.core.logging_config.RequestIdMiddleware',
     'apps.core.middleware.AuditMiddleware',
     'apps.core.middleware.RateLimitMiddleware',
+    'apps.core.middleware.MetricsMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -77,10 +81,20 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
-# PostgreSQL en production, SQLite en dev si DB_USE_SQLITE=True
+# Base de données : DATABASE_URL (Render) > SQLite dev > PostgreSQL manuel
+_database_url = os.getenv('DATABASE_URL', '')
 _use_sqlite = os.getenv('DB_USE_SQLITE', 'False') == 'True'
 
-if _use_sqlite:
+if _database_url:
+    # Render fournit DATABASE_URL automatiquement
+    DATABASES = {
+        'default': dj_database_url.parse(
+            _database_url,
+            conn_max_age=60,
+            conn_health_checks=True,
+        )
+    }
+elif _use_sqlite:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -159,6 +173,7 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
@@ -180,20 +195,37 @@ SIMPLE_JWT = {
     'USER_ID_CLAIM': 'user_id',
 }
 
-# Email
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'SGHL <noreply@sghl.com>')
+# Email — console fallback si les credentials Gmail ne sont pas configurés
+_email_user = os.getenv('EMAIL_HOST_USER', '')
+_email_pass = os.getenv('EMAIL_HOST_PASSWORD', '')
+_placeholder = ('your-email@gmail.com', 'your-app-password', '')
+
+if _email_user in _placeholder or _email_pass in _placeholder:
+    # Dev sans SMTP : affiche l'OTP dans la console Django
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+    EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
+    EMAIL_USE_TLS = True
+    EMAIL_HOST_USER = _email_user
+    EMAIL_HOST_PASSWORD = _email_pass
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', f'SGHL <{_email_user or "noreply@sghl.com"}>')
 
 # CORS
+_frontend_url = os.getenv('FRONTEND_URL', '')
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
     'http://localhost:5173',
     'http://127.0.0.1:3000',
+    'http://localhost:62314',
+    'http://127.0.0.1:62314',
+    *([_frontend_url] if _frontend_url else []),
+]
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^http://localhost:\d+$',
+    r'^http://127\.0\.0\.1:\d+$',
+    r'^http://10\.0\.2\.2:\d+$',  # Android emulator → host machine
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -218,22 +250,66 @@ LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
+        'json': {
+            '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
+            'format': '%(timestamp)s %(level)s %(name)s %(message)s'
+        },
         'verbose': {
             'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
             'style': '{',
         },
     },
     'handlers': {
-        'console': {'class': 'logging.StreamHandler', 'formatter': 'verbose'},
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'json' if not DEBUG else 'verbose',
+        },
         'file': {
             'class': 'logging.FileHandler',
             'filename': BASE_DIR / 'logs' / 'sghl.log',
-            'formatter': 'verbose',
+            'formatter': 'json',
         },
     },
-    'root': {'handlers': ['console'], 'level': 'INFO'},
+    'filters': {
+        'request_id': {
+            '()': 'apps.core.logging_config.RequestIdFilter',
+        }
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'DEBUG' if DEBUG else 'INFO',
+        'filters': ['request_id']
+    },
     'loggers': {
-        'django': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
-        'apps': {'handlers': ['console'], 'level': 'DEBUG', 'propagate': False},
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+            'filters': ['request_id']
+        },
+        'apps': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+            'filters': ['request_id']
+        },
+        'celery': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+            'filters': ['request_id']
+        }
     },
 }
+
+# Celery Configuration
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_ACCEPT_CONTENT = ['application/json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60
+CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60

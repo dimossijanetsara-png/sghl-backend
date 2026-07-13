@@ -1,10 +1,11 @@
-from typing import List
+﻿from typing import List
 from decimal import Decimal
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from ninja import Router
 from ninja.errors import HttpError
-from ninja.pagination import paginate, PageNumberPagination
+from ninja.pagination import paginate
+from apps.core.pagination import SGHLPagination
 
 from apps.core.models import create_audit_log
 from apps.authentication.permissions import require_permission
@@ -84,7 +85,7 @@ def create_invoice(request, payload: InvoiceCreateSchema):
 
 @router.get('/factures', response=List[InvoiceOut])
 @require_permission('billing:read')
-@paginate(PageNumberPagination)
+@paginate(SGHLPagination)
 def list_invoices(request, patient_id: str = '', status: str = ''):
     qs = Invoice.objects.prefetch_related('items').all()
     if patient_id:
@@ -148,3 +149,4 @@ def add_payment(request, invoice_id: str, payload: PaymentSchema):
 def list_payments(request, invoice_id: str):
     invoice = get_object_or_404(Invoice, id=invoice_id)
     return list(invoice.payments.all())
+

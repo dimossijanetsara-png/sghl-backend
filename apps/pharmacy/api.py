@@ -1,9 +1,10 @@
-from typing import List
+﻿from typing import List
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from ninja import Router
 from ninja.errors import HttpError
-from ninja.pagination import paginate, PageNumberPagination
+from ninja.pagination import paginate
+from apps.core.pagination import SGHLPagination
 
 from apps.core.models import create_audit_log
 from apps.authentication.permissions import require_permission
@@ -20,7 +21,7 @@ def _get_ip(request):
 
 @router.get('/medicaments', response=List[MedicationOut])
 @require_permission('pharmacy:read')
-@paginate(PageNumberPagination)
+@paginate(SGHLPagination)
 def list_medications(request, search: str = '', low_stock: bool = False):
     qs = Medication.objects.filter(is_active=True)
     if search:
@@ -116,7 +117,7 @@ def dispense(request, payload: DispensationCreateSchema):
 
 @router.get('/mouvements', response=List[StockMovementOut])
 @require_permission('pharmacy:read')
-@paginate(PageNumberPagination)
+@paginate(SGHLPagination)
 def list_movements(request, medication_id: str = ''):
     qs = StockMovement.objects.all()
     if medication_id:
@@ -129,3 +130,4 @@ def list_movements(request, medication_id: str = ''):
 def low_stock_alerts(request):
     meds = Medication.objects.filter(is_active=True)
     return [m for m in meds if m.is_low_stock()]
+

@@ -4,8 +4,19 @@ from datetime import date, datetime
 import uuid
 
 
+class UserBriefOut(Schema):
+    id: uuid.UUID
+    email: str
+    first_name: str
+    last_name: str
+    role: str
+    phone: str
+    is_active: bool
+
+
 class StaffProfileOut(Schema):
     id: uuid.UUID
+    user: UserBriefOut
     user_id: uuid.UUID
     department_id: Optional[uuid.UUID]
     employee_number: str

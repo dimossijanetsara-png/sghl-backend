@@ -1,13 +1,15 @@
-from typing import List
+﻿from typing import List
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db import transaction
 from ninja import Router
 from ninja.errors import HttpError
-from ninja.pagination import paginate, PageNumberPagination
+from ninja.pagination import paginate
+from apps.core.pagination import SGHLPagination
 
 from apps.core.models import create_audit_log
 from apps.authentication.permissions import require_permission
+from apps.authentication.patient_utils import enforce_patient_filter, assert_patient_owns
 from .models import LabTest, LabOrder, LabOrderItem, LabOrderAudit
 from .schemas import (
     LabTestOut, LabOrderCreateSchema, LabOrderOut,
@@ -83,12 +85,14 @@ def create_order(request, payload: LabOrderCreateSchema):
 
 @router.get('/commandes', response=List[LabOrderOut])
 @require_permission('laboratory:read')
-@paginate(PageNumberPagination)
+@paginate(SGHLPagination)
 def list_orders(request, status: str = '', patient_id: str = ''):
     qs = LabOrder.objects.prefetch_related('items').all()
+    # PATIENT : uniquement ses propres analyses
+    qs = enforce_patient_filter(request, qs)
     if status:
         qs = qs.filter(status=status)
-    if patient_id:
+    if patient_id and request.auth.role != 'PATIENT':
         qs = qs.filter(patient_id=patient_id)
     return [_order_to_dict(o) for o in qs]
 
@@ -97,6 +101,8 @@ def list_orders(request, status: str = '', patient_id: str = ''):
 @require_permission('laboratory:read')
 def get_order(request, order_id: str):
     order = get_object_or_404(LabOrder, id=order_id)
+    # PATIENT : uniquement ses propres analyses
+    assert_patient_owns(request, order)
     return _order_to_dict(order)
 
 
@@ -175,3 +181,4 @@ def publish_order(request, order_id: str):
     order.save(update_fields=['status', 'published_at'])
     _audit(order, request.auth, 'PUBLISH')
     return {'detail': 'Resultats publies'}
+

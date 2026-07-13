@@ -1,9 +1,10 @@
-from typing import List
+﻿from typing import List
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ninja import Router
 from ninja.errors import HttpError
-from ninja.pagination import paginate, PageNumberPagination
+from ninja.pagination import paginate
+from apps.core.pagination import SGHLPagination
 
 from apps.authentication.permissions import require_permission
 from .models import Conversation, Message
@@ -32,7 +33,7 @@ def list_conversations(request):
 
 
 @router.get('/conversations/{conv_id}/messages', response=List[MessageOut])
-@paginate(PageNumberPagination)
+@paginate(SGHLPagination)
 def list_messages(request, conv_id: str):
     conv = get_object_or_404(Conversation, id=conv_id)
     if not conv.participants.filter(id=request.auth.id).exists():
@@ -42,3 +43,4 @@ def list_messages(request, conv_id: str):
         conversation=conv, is_read=False
     ).exclude(sender=request.auth).update(is_read=True, read_at=timezone.now())
     return Message.objects.filter(conversation=conv)
+

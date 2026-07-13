@@ -1,10 +1,11 @@
-from typing import List
+﻿from typing import List
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ninja import Router, File
 from ninja.files import UploadedFile
 from ninja.errors import HttpError
-from ninja.pagination import paginate, PageNumberPagination
+from ninja.pagination import paginate
+from apps.core.pagination import SGHLPagination
 
 from apps.core.models import create_audit_log
 from apps.authentication.permissions import require_permission
@@ -40,7 +41,7 @@ def create_patient(request, payload: PatientCreateSchema):
 
 @router.get('', response=List[PatientListOut])
 @require_permission('patients:read')
-@paginate(PageNumberPagination)
+@paginate(SGHLPagination)
 def list_patients(request, search: str = '', archived: bool = False):
     qs = Patient.objects.filter(is_archived=archived)
     if search:
@@ -136,3 +137,4 @@ def list_documents(request, patient_id: str):
 
 # Import manquant pour Q
 from django.db import models
+

@@ -1,10 +1,11 @@
-from typing import List
+﻿from typing import List
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db import transaction
 from ninja import Router
 from ninja.errors import HttpError
-from ninja.pagination import paginate, PageNumberPagination
+from ninja.pagination import paginate
+from apps.core.pagination import SGHLPagination
 
 from apps.core.models import create_audit_log
 from apps.authentication.permissions import require_permission
@@ -150,7 +151,7 @@ def admit_patient(request, payload: HospitalizationCreateSchema):
 
 @router.get('/admissions', response=List[HospitalizationOut])
 @require_permission('hospitalization:read')
-@paginate(PageNumberPagination)
+@paginate(SGHLPagination)
 def list_hospitalizations(request, status: str = 'ACTIVE', patient_id: str = ''):
     qs = Hospitalization.objects.all()
     if status:
@@ -208,3 +209,4 @@ def transfer_patient(request, hosp_id: str, payload: TransferSchema):
 
     create_audit_log(request.auth, 'UPDATE', 'Transfer', resource_id=transfer.id, ip_address=_get_ip(request))
     return transfer
+

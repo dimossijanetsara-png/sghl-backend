@@ -1,7 +1,10 @@
 import uuid
+import random
 import pyotp
+from datetime import timedelta
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
+from django.utils import timezone
 from apps.core.models import TimeStampedModel
 
 
@@ -24,14 +27,16 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
     class Role(models.TextChoices):
-        ADMIN = 'ADMIN', 'Administrateur'
+        ADMIN = 'ADMIN', 'Superutilisateur'
         DOCTOR = 'DOCTOR', 'Médecin'
         NURSE = 'NURSE', 'Infirmier(e)'
         BIOLOGIST = 'BIOLOGIST', 'Biologiste'
         PHARMACIST = 'PHARMACIST', 'Pharmacien(ne)'
-        RECEPTIONIST = 'RECEPTIONIST', 'Réceptionniste'
+        RECEPTIONIST = 'RECEPTIONIST', 'Secrétaire / Réceptionniste'
         ACCOUNTANT = 'ACCOUNTANT', 'Comptable'
         PATIENT = 'PATIENT', 'Patient'
+        LABTECH = 'LABTECH', 'Technicien(ne) de laboratoire'
+        OTHER = 'OTHER', 'Autre personnel'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
@@ -51,6 +56,11 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
     locked_until = models.DateTimeField(null=True, blank=True)
     last_login_ip = models.GenericIPAddressField(null=True, blank=True)
     password_changed_at = models.DateTimeField(null=True, blank=True)
+
+    # OTP pour vérification lors de l'inscription
+    otp_code = models.CharField(max_length=6, blank=True)
+    otp_expires_at = models.DateTimeField(null=True, blank=True)
+    otp_verified = models.BooleanField(default=False)
 
     objects = UserManager()
 
@@ -81,6 +91,31 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
     def verify_mfa_token(self, token):
         totp = pyotp.TOTP(self.mfa_secret)
         return totp.verify(token)
+
+    def generate_otp(self):
+        """Génère un code OTP à 6 chiffres valable 10 minutes."""
+        self.otp_code = str(random.randint(100000, 999999))
+        self.otp_expires_at = timezone.now() + timedelta(minutes=10)
+        self.save(update_fields=['otp_code', 'otp_expires_at'])
+        return self.otp_code
+
+    def check_otp(self, code: str):
+        """Vérifie le code OTP. Retourne (bool, message)."""
+        if not self.otp_code:
+            return False, "Aucun code OTP généré"
+        if not self.otp_expires_at or timezone.now() > self.otp_expires_at:
+            return False, "Code OTP expiré"
+        if self.otp_code != code.strip():
+            return False, "Code OTP invalide"
+        return True, "OK"
+
+    def activate_account(self):
+        """Active le compte après vérification OTP."""
+        self.is_active = True
+        self.otp_verified = True
+        self.otp_code = ''
+        self.otp_expires_at = None
+        self.save(update_fields=['is_active', 'otp_verified', 'otp_code', 'otp_expires_at'])
 
     def is_account_locked(self):
         from django.utils import timezone

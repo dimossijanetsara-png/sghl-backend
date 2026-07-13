@@ -1,11 +1,13 @@
-from typing import List
+﻿from typing import List
 from django.shortcuts import get_object_or_404
 from ninja import Router
 from ninja.errors import HttpError
-from ninja.pagination import paginate, PageNumberPagination
+from ninja.pagination import paginate
+from apps.core.pagination import SGHLPagination
 
 from apps.core.models import create_audit_log
 from apps.authentication.permissions import require_permission
+from apps.authentication.patient_utils import enforce_patient_filter, assert_patient_owns
 from .models import Consultation, Diagnosis, Prescription, PrescriptionItem
 from .schemas import (
     ConsultationCreateSchema, ConsultationUpdateSchema, ConsultationOut, ConsultationDetailOut,
@@ -52,10 +54,12 @@ def create_consultation(request, payload: ConsultationCreateSchema):
 
 @router.get('/consultations', response=List[ConsultationOut])
 @require_permission('clinical:read')
-@paginate(PageNumberPagination)
+@paginate(SGHLPagination)
 def list_consultations(request, patient_id: str = '', doctor_id: str = ''):
     qs = Consultation.objects.all()
-    if patient_id:
+    # PATIENT : uniquement ses propres consultations
+    qs = enforce_patient_filter(request, qs)
+    if patient_id and request.auth.role != 'PATIENT':
         qs = qs.filter(patient_id=patient_id)
     if doctor_id:
         qs = qs.filter(doctor_id=doctor_id)
@@ -66,6 +70,8 @@ def list_consultations(request, patient_id: str = '', doctor_id: str = ''):
 @require_permission('clinical:read')
 def get_consultation(request, consultation_id: str):
     consultation = get_object_or_404(Consultation, id=consultation_id)
+    # PATIENT ne voit que ses propres consultations
+    assert_patient_owns(request, consultation)
     create_audit_log(request.auth, 'VIEW', 'Consultation', resource_id=consultation_id, ip_address=_get_ip(request))
     return {
         'id': consultation.id,
@@ -161,3 +167,4 @@ def validate_prescription(request, prescription_id: str):
         resource_id=prescription_id, ip_address=_get_ip(request)
     )
     return {'detail': 'Ordonnance validee', 'status': prescription.status}
+

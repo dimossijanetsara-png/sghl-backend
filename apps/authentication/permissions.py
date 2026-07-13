@@ -58,6 +58,15 @@ ROLE_PERMISSIONS = {
         'clinical:read',
         'laboratory:read',
     },
+    'LABTECH': {
+        'patients:read',
+        'laboratory:read', 'laboratory:write',
+    },
+    'OTHER': {
+        'patients:read',
+        'appointments:read',
+        'dashboard:read',
+    },
 }
 
 

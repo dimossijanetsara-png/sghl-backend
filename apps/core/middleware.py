@@ -3,8 +3,39 @@ import logging
 from django.core.cache import cache
 from django.http import JsonResponse
 from django.conf import settings
+from apps.core.metrics import REQUEST_COUNT, REQUEST_DURATION, ERROR_RATE
 
 logger = logging.getLogger('apps.core')
+
+
+class MetricsMiddleware:
+    """Track API metrics for Prometheus monitoring."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if not request.path.startswith('/api/'):
+            return self.get_response(request)
+
+        start_time = time.time()
+        endpoint = request.path.replace('/api/v1', '')
+        method = request.method
+
+        try:
+            response = self.get_response(request)
+            duration = time.time() - start_time
+            status = response.status_code
+
+            REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=status).inc()
+            REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(duration)
+
+            return response
+        except Exception as e:
+            duration = time.time() - start_time
+            ERROR_RATE.labels(error_type=type(e).__name__, endpoint=endpoint).inc()
+            REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(duration)
+            raise
 
 
 class AuditMiddleware:

@@ -1,16 +1,18 @@
-from typing import List
+﻿from typing import List
 from django.shortcuts import get_object_or_404
 from django.core.mail import send_mail
 from django.conf import settings
 from ninja import Router
 from ninja.errors import HttpError
-from ninja.pagination import paginate, PageNumberPagination
+from ninja.pagination import paginate
+from apps.core.pagination import SGHLPagination
 
 from apps.authentication.permissions import require_permission
+from apps.authentication.patient_utils import enforce_patient_filter, assert_patient_owns
 from .models import Appointment, DoctorAvailability
 from .schemas import (
     AppointmentCreateSchema, AppointmentOut, AppointmentUpdateSchema,
-    AvailabilityCreateSchema, AvailabilityOut,
+    AvailabilityCreateSchema, AvailabilityOut, DoctorOut,
 )
 
 router = Router()
@@ -59,14 +61,31 @@ def get_availability(request, doctor_id: str):
     return list(DoctorAvailability.objects.filter(doctor_id=doctor_id, is_active=True))
 
 
+@router.get('/medecins', response=List[DoctorOut])
+@require_permission('appointments:read')
+def list_doctors(request):
+    """Liste des médecins disponibles pour la prise de rendez-vous."""
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    return list(User.objects.filter(role='DOCTOR', is_active=True).order_by('last_name', 'first_name'))
+
+
 @router.post('', response=AppointmentOut)
 @require_permission('appointments:write')
 def create_appointment(request, payload: AppointmentCreateSchema):
     from apps.patients.models import Patient
+    from apps.authentication.patient_utils import get_patient_profile
     from django.contrib.auth import get_user_model
     User = get_user_model()
 
-    patient = get_object_or_404(Patient, id=payload.patient_id)
+    # PATIENT : résolution automatique depuis le profil lié au compte connecté
+    if request.auth.role == 'PATIENT':
+        patient = get_patient_profile(request.auth)
+    else:
+        if payload.patient_id is None:
+            raise HttpError(422, 'patient_id requis pour ce rôle')
+        patient = get_object_or_404(Patient, id=payload.patient_id)
+
     doctor = get_object_or_404(User, id=payload.doctor_id, role='DOCTOR')
 
     # Vérifier conflits
@@ -93,12 +112,14 @@ def create_appointment(request, payload: AppointmentCreateSchema):
 
 @router.get('', response=List[AppointmentOut])
 @require_permission('appointments:read')
-@paginate(PageNumberPagination)
+@paginate(SGHLPagination)
 def list_appointments(request, doctor_id: str = '', patient_id: str = '', status: str = ''):
     qs = Appointment.objects.all()
-    if doctor_id:
+    # PATIENT : n'accède qu'à ses propres rendez-vous
+    qs = enforce_patient_filter(request, qs)
+    if doctor_id and request.auth.role != 'PATIENT':
         qs = qs.filter(doctor_id=doctor_id)
-    if patient_id:
+    if patient_id and request.auth.role != 'PATIENT':
         qs = qs.filter(patient_id=patient_id)
     if status:
         qs = qs.filter(status=status)
@@ -109,6 +130,10 @@ def list_appointments(request, doctor_id: str = '', patient_id: str = '', status
 @require_permission('appointments:write')
 def update_appointment(request, appointment_id: str, payload: AppointmentUpdateSchema):
     appointment = get_object_or_404(Appointment, id=appointment_id)
+    # PATIENT ne peut qu'annuler ses propres rendez-vous
+    assert_patient_owns(request, appointment)
+    if request.auth.role == 'PATIENT' and payload.status not in (None, 'CANCELLED'):
+        raise HttpError(403, 'Un patient ne peut qu\'annuler ses rendez-vous')
     if payload.status:
         appointment.status = payload.status
     if payload.notes is not None:
@@ -117,3 +142,4 @@ def update_appointment(request, appointment_id: str, payload: AppointmentUpdateS
         appointment.cancellation_reason = payload.cancellation_reason
     appointment.save()
     return appointment
+

@@ -5,12 +5,19 @@ import uuid
 
 
 class AppointmentCreateSchema(Schema):
-    patient_id: uuid.UUID
+    patient_id: Optional[uuid.UUID] = None  # Auto-résolu pour le rôle PATIENT
     doctor_id: uuid.UUID
     appointment_date: datetime
     duration_minutes: int = 30
     reason: str
     notes: Optional[str] = ''
+
+
+class DoctorOut(Schema):
+    id: uuid.UUID
+    first_name: str
+    last_name: str
+    email: str
 
 
 class AppointmentOut(Schema):

@@ -1,7 +1,8 @@
-from typing import List
+﻿from typing import List
 from django.shortcuts import get_object_or_404
 from ninja import Router
-from ninja.pagination import paginate, PageNumberPagination
+from ninja.pagination import paginate
+from apps.core.pagination import SGHLPagination
 
 from apps.authentication.permissions import require_permission
 from .models import StaffProfile, Shift
@@ -29,11 +30,13 @@ def create_staff(request, payload: StaffCreateSchema):
 
 @router.get('/personnel', response=List[StaffProfileOut])
 @require_permission('hr:read')
-@paginate(PageNumberPagination)
-def list_staff(request, department_id: str = ''):
-    qs = StaffProfile.objects.filter(is_active=True)
+@paginate(SGHLPagination)
+def list_staff(request, department_id: str = '', role: str = ''):
+    qs = StaffProfile.objects.select_related('user').filter(is_active=True)
     if department_id:
         qs = qs.filter(department_id=department_id)
+    if role:
+        qs = qs.filter(user__role=role)
     return qs
 
 
@@ -54,7 +57,7 @@ def create_shift(request, payload: ShiftCreateSchema):
 
 @router.get('/gardes', response=List[ShiftOut])
 @require_permission('hr:read')
-@paginate(PageNumberPagination)
+@paginate(SGHLPagination)
 def list_shifts(request, department_id: str = '', staff_id: str = ''):
     qs = Shift.objects.all()
     if department_id:
@@ -71,3 +74,4 @@ def confirm_shift(request, shift_id: str):
     shift.is_confirmed = True
     shift.save(update_fields=['is_confirmed'])
     return shift
+

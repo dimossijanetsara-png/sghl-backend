@@ -245,62 +245,66 @@ ALLOWED_UPLOAD_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/dic
 RATE_LIMIT_REQUESTS = 100
 RATE_LIMIT_WINDOW = 60  # seconds
 
-# Logging
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'json': {
-            '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
-            'format': '%(timestamp)s %(level)s %(name)s %(message)s'
+# Logging — filtre request_id uniquement en dev (évite l'erreur sur Render)
+if DEBUG:
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'verbose': {
+                'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+                'style': '{',
+            },
         },
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-            'style': '{',
+        'filters': {
+            'request_id': {
+                '()': 'apps.core.logging_config.RequestIdFilter',
+            }
         },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'json' if not DEBUG else 'verbose',
+        'handlers': {
+            'console': {
+                'class': 'logging.StreamHandler',
+                'formatter': 'verbose',
+                'filters': ['request_id'],
+            },
         },
-        'file': {
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'logs' / 'sghl.log',
-            'formatter': 'json',
-        },
-    },
-    'filters': {
-        'request_id': {
-            '()': 'apps.core.logging_config.RequestIdFilter',
-        }
-    },
-    'root': {
-        'handlers': ['console'],
-        'level': 'DEBUG' if DEBUG else 'INFO',
-        'filters': ['request_id']
-    },
-    'loggers': {
-        'django': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-            'filters': ['request_id']
-        },
-        'apps': {
+        'root': {
             'handlers': ['console'],
             'level': 'DEBUG',
-            'propagate': False,
-            'filters': ['request_id']
+            'filters': ['request_id'],
         },
-        'celery': {
+        'loggers': {
+            'django': {'handlers': ['console'], 'level': 'INFO', 'propagate': False, 'filters': ['request_id']},
+            'apps': {'handlers': ['console'], 'level': 'DEBUG', 'propagate': False, 'filters': ['request_id']},
+            'celery': {'handlers': ['console'], 'level': 'INFO', 'propagate': False, 'filters': ['request_id']},
+        },
+    }
+else:
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'simple': {
+                'format': '{levelname} {asctime} {module} {message}',
+                'style': '{',
+            },
+        },
+        'handlers': {
+            'console': {
+                'class': 'logging.StreamHandler',
+                'formatter': 'simple',
+            },
+        },
+        'root': {
             'handlers': ['console'],
             'level': 'INFO',
-            'propagate': False,
-            'filters': ['request_id']
-        }
-    },
-}
+        },
+        'loggers': {
+            'django': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+            'apps': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+            'celery': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        },
+    }
 
 # Celery Configuration
 CELERY_BROKER_URL = REDIS_URL

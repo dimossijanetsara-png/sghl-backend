@@ -46,7 +46,7 @@ def _send_otp_email(user, otp_code: str):
                 f'Si vous n\'avez pas demandé ce code, ignorez cet email.\n\n'
                 f'— Équipe SGHL'
             ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
+            from_email=django_settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user.email],
             fail_silently=False,
         )
